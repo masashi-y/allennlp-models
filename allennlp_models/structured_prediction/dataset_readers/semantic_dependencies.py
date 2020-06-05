@@ -13,6 +13,7 @@ from allennlp.data.instance import Instance
 logger = logging.getLogger(__name__)
 
 FIELDS = ["id", "form", "lemma", "pos", "head", "deprel", "top", "pred", "frame"]
+DEFAULT_ROOT_LABEL = "@@@ROOT@@@"
 
 
 def parse_sentence(
@@ -51,13 +52,15 @@ def parse_sentence(
         for line in sentence_blob.split("\n")
         if line and not line.strip().startswith("#")
     ]
-    for line_idx, line in enumerate(lines):
+    for line_idx, line in enumerate(lines, 1):
         annotated_token = {k: v for k, v in zip(FIELDS, line)}
+        if annotated_token["top"] == "+":
+            arc_indices.append((line_idx, 0))
+            arc_tags.append(DEFAULT_ROOT_LABEL)
         if annotated_token["pred"] == "+":
             predicates.append(line_idx)
         annotated_sentence.append(annotated_token)
-
-    for line_idx, line in enumerate(lines):
+    for line_idx, line in enumerate(lines, 1):
         for predicate_idx, arg in enumerate(line[len(FIELDS) :]):
             if arg != "_":
                 arc_indices.append((line_idx, predicates[predicate_idx]))
@@ -129,6 +132,7 @@ class SemanticDependenciesDatasetReader(DatasetReader):
         if pos_tags is not None:
             fields["pos_tags"] = SequenceLabelField(pos_tags, token_field, label_namespace="pos")
         if arc_indices is not None and arc_tags is not None:
-            fields["arc_tags"] = AdjacencyField(arc_indices, token_field, arc_tags)
+            fields["arc_tags"] = AdjacencyField(
+                arc_indices, token_field, arc_tags, extra_space_for_root=True)
 
         return Instance(fields)

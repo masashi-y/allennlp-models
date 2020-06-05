@@ -112,6 +112,7 @@ class GraphParser(Model):
         self._pos_tag_embedding = pos_tag_embedding or None
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
+        self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder_dim]))
 
         representation_dim = text_field_embedder.get_output_dim()
         if pos_tag_embedding is not None:
@@ -180,6 +181,13 @@ class GraphParser(Model):
         embedded_text_input = self._input_dropout(embedded_text_input)
         encoded_text = self.encoder(embedded_text_input, mask)
 
+        batch_size, _, encoding_dim = encoded_text.size()
+
+        head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
+        # Concatenate the head sentinel onto the sentence representation.
+        encoded_text = torch.cat([head_sentinel, encoded_text], 1)
+        mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
+
         encoded_text = self._dropout(encoded_text)
 
         # shape (batch_size, sequence_length, arc_representation_dim)
@@ -245,7 +253,7 @@ class GraphParser(Model):
             arc_matrix = instance_arc_probs > self.edge_prediction_threshold
             edges = []
             edge_tags = []
-            for i in range(length):
+            for i in range(1, length):
                 for j in range(length):
                     if arc_matrix[i, j] == 1:
                         edges.append((i, j))
